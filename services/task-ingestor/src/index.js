@@ -23,5 +23,16 @@ app.post('/task' , async(req,res)=>{
 
     try{
         //sending to kafka
+        await kafkaProducer.sendTask(task);
+         return res.status(200).json({ success: true, message: 'Task ingested successfully' });
+    } catch (err) {
+        console.error('Error sending task to Kafka:', err);
+        return res.status(500).json({ success: false, error: 'Failed to ingest task' });
     }
-})
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`Task Ingestor service running on port ${PORT}`);
+});
+    
