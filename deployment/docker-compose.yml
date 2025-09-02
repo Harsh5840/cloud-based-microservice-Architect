@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    extends:
+      file: ../db/docker-compose.yml
+      service: postgres
+
+  # Kafka
+  zookeeper:
+    extends:
+      file: ../kafka/docker-compose.yml
+      service: zookeeper
+
+  kafka:
+    extends:
+      file: ../kafka/docker-compose.yml
+      service: kafka
+    depends_on:
+      - zookeeper
+
+  # Application Services
+  ingestor:
+    build:
+      context: ..
+      dockerfile: infra/docker/ingestor.Dockerfile
+    container_name: financial-risk-ingestor
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: financial-data
+      DATA_SOURCE_URL: ${DATA_SOURCE_URL:-https://api.example.com/financial-data}
+      POLLING_INTERVAL: ${POLLING_INTERVAL:-60000}
+    depends_on:
+      - kafka
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/worker.Dockerfile
+    container_name: financial-risk-worker
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: financial-data
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: financial_risk
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      - kafka
+      - postgres
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: infra/docker/dashboard.Dockerfile
+    container_name: financial-risk-dashboard
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: financial_risk
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: infra/docker/scheduler.Dockerfile
+    container_name: financial-risk-scheduler
+    environment:
+      INGESTOR_URL: http://ingestor:3002/trigger
+      CRON_SCHEDULE: ${CRON_SCHEDULE:-"0 */1 * * *"}
+      TRIGGER_ON_STARTUP: ${TRIGGER_ON_STARTUP:-true}
+      DATASET_PATHS: ${DATASET_PATHS:-'["/data/financial_dataset_1.json", "/data/financial_dataset_2.json"]'}
+    volumes:
+      - ${DATASET_DIR:-./data}:/data
+    depends_on:
+      - ingestor
+    restart: unless-stopped
+
+  # Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: financial-risk-prometheus
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - worker
+      - dashboard
+
+  grafana:
+    build:
+      context: ../monitoring/grafana
+      dockerfile: Dockerfile
+    container_name: financial-risk-grafana
+    volumes:
+      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ../monitoring/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ../monitoring/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3030:3000"
+    depends_on:
+      - prometheus
+
+  # UI Tools
+  kafka-ui:
+    extends:
+      file: ../kafka/docker-compose.yml
+      service: kafka-ui
+    depends_on:
+      - kafka
+
+  pgadmin:
+    extends:
+      file: ../db/docker-compose.yml
+      service: pgadmin
+    depends_on:
+      - postgres

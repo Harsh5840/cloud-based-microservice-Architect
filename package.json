@@ -1,0 +1,23 @@
+{
+  "name": "financial-risk-analyzer",
+  "version": "1.0.0",
+  "description": "Microservices platform for financial risk analysis",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "start:ingestor": "cd apps/ingestor && npm start",
+    "start:worker": "cd apps/worker && npm start",
+    "start:dashboard": "cd apps/dashboard && npm start",
+    "start:scheduler": "cd apps/scheduler && npm start",
+    "install:all": "npm install && npm run install:services",
+    "install:services": "npm run install:ingestor && npm run install:worker && npm run install:dashboard && npm run install:scheduler",
+    "install:ingestor": "cd apps/ingestor && npm install",
+    "install:worker": "cd apps/worker && npm install",
+    "install:dashboard": "cd apps/dashboard && npm install",
+    "install:scheduler": "cd apps/scheduler && npm install"
+  },
+  "author": "",
+  "license": "ISC"
+}

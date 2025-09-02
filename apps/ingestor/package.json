@@ -1,0 +1,17 @@
+{
+  "name": "financial-risk-analyzer-ingestor",
+  "version": "1.0.0",
+  "description": "Service that pulls financial data and sends to Kafka",
+  "main": "ingestor.js",
+  "scripts": {
+    "start": "node ingestor.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "kafkajs": "^2.2.4"
+  },
+  "author": "",
+  "license": "ISC"
+}
