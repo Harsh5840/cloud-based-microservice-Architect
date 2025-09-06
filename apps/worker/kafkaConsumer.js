@@ -3,7 +3,7 @@ const { processTask } = require('./taskProcessor');
 require('dotenv').config();
 
 // Kafka configuration
-const KAFKA_BROKERS = process.env.KAFKA_BROKERS || 'localhost:9092';
+const KAFKA_BROKERS = process.env.KAFKA_BROKERS || 'localhost:29092';
 const CLIENT_ID = process.env.KAFKA_CLIENT_ID || 'financial-risk-worker';
 const CONSUMER_GROUP = process.env.KAFKA_CONSUMER_GROUP || 'risk-analyzer-group';
 const KAFKA_TOPIC = process.env.KAFKA_TOPIC || 'financial-data';

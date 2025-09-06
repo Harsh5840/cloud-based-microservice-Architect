@@ -15,8 +15,19 @@ The platform consists of the following services:
 
 - Docker and Docker Compose
 - Node.js 18+ (for local development)
+- Alpha Vantage API Key (free at https://www.alphavantage.co/support/#api-key)
 
 ## Getting Started
+
+### Alpha Vantage Setup (Required for Real Data)
+
+1. **Get your free API key**: Visit https://www.alphavantage.co/support/#api-key
+2. **Configure the ingestor**:
+   ```bash
+   cp apps/ingestor/.env.example apps/ingestor/.env
+   # Edit apps/ingestor/.env and add your API key
+   ```
+3. **See detailed setup guide**: [setup-alphavantage.md](setup-alphavantage.md)
 
 ### Project Initialization
 

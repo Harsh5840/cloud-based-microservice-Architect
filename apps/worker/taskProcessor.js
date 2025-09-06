@@ -51,50 +51,75 @@ async function processTask(data) {
  * @returns {number} - Risk score between 0 and 1
  */
 function calculateRiskScore(data) {
-  // This is a simplified risk calculation algorithm
-  // In a real-world scenario, this would be much more sophisticated
+  // Enhanced risk calculation algorithm for real financial data
   
-  let score = 0.5; // Default medium risk
+  let score = 0.3; // Start with lower baseline risk
   
-  // Factor 1: Volatility (if available)
+  // Factor 1: Volatility (20% weight)
   if (data.volatility !== undefined) {
     // Higher volatility = higher risk
-    score += normalizeValue(data.volatility, 0, 100) * 0.2;
+    const volatilityRisk = normalizeValue(data.volatility, 5, 80) * 0.2;
+    score += volatilityRisk;
   }
   
-  // Factor 2: Volume (if available)
+  // Factor 2: Volume Analysis (15% weight)
   if (data.volume !== undefined) {
-    // Extremely high or low volumes might indicate risk
-    const normalizedVolume = normalizeValue(data.volume, 0, 1000000);
-    const volumeRisk = Math.abs(normalizedVolume - 0.5) * 2; // Convert to 0-1 range centered at 0.5
-    score += volumeRisk * 0.15;
+    // Very high or very low volumes can indicate risk
+    const normalizedVolume = normalizeValue(data.volume, 100000, 50000000);
+    
+    // Risk is higher at extremes (very low or very high volume)
+    let volumeRisk;
+    if (normalizedVolume < 0.2 || normalizedVolume > 0.8) {
+      volumeRisk = 0.15; // High risk for extreme volumes
+    } else {
+      volumeRisk = Math.abs(normalizedVolume - 0.5) * 0.3; // Moderate risk for normal volumes
+    }
+    score += volumeRisk;
   }
   
-  // Factor 3: Price change (if available)
+  // Factor 3: Price Change Percentage (25% weight)
   if (data.price_change_percent !== undefined) {
-    // Larger price changes = higher risk
-    const priceChangeRisk = Math.abs(data.price_change_percent) / 10; // Normalize to 0-1 range
-    score += Math.min(priceChangeRisk, 1) * 0.25;
+    // Larger absolute price changes = higher risk
+    const priceChangeRisk = Math.min(Math.abs(data.price_change_percent) / 8, 1) * 0.25;
+    score += priceChangeRisk;
   }
   
-  // Factor 4: Market conditions (if available)
+  // Factor 4: Market Sentiment (20% weight)
   if (data.market_sentiment !== undefined) {
-    // Convert sentiment string to risk factor
-    const sentimentMap = {
-      'very_bearish': 0.9,
-      'bearish': 0.7,
-      'neutral': 0.5,
-      'bullish': 0.3,
-      'very_bullish': 0.1
+    const sentimentRiskMap = {
+      'very_bearish': 0.18,  // High risk
+      'bearish': 0.12,       // Medium-high risk
+      'neutral': 0.08,       // Medium risk
+      'bullish': 0.05,       // Low-medium risk
+      'very_bullish': 0.03   // Low risk (but still some risk due to potential bubble)
     };
     
-    if (sentimentMap[data.market_sentiment]) {
-      score += sentimentMap[data.market_sentiment] * 0.2;
-    }
+    score += sentimentRiskMap[data.market_sentiment] || 0.1;
+  }
+  
+  // Factor 5: Price Range Analysis (10% weight)
+  if (data.high !== undefined && data.low !== undefined && data.close !== undefined) {
+    // Higher intraday range indicates more volatility/risk
+    const priceRange = (data.high - data.low) / data.close;
+    const rangeRisk = Math.min(priceRange * 2, 1) * 0.1;
+    score += rangeRisk;
+  }
+  
+  // Factor 6: Gap Analysis (10% weight)
+  if (data.open !== undefined && data.previous_close !== undefined) {
+    // Large gaps between previous close and current open indicate risk
+    const gapPercent = Math.abs((data.open - data.previous_close) / data.previous_close) * 100;
+    const gapRisk = Math.min(gapPercent / 5, 1) * 0.1;
+    score += gapRisk;
   }
   
   // Ensure score is between 0 and 1
-  return Math.max(0, Math.min(1, score));
+  const finalScore = Math.max(0, Math.min(1, score));
+  
+  // Add some logging for debugging
+  console.log(`Risk calculation for ${data.symbol || 'unknown'}: ${finalScore.toFixed(4)} (volatility: ${data.volatility}, change: ${data.price_change_percent}%, sentiment: ${data.market_sentiment})`);
+  
+  return finalScore;
 }
 
 /**

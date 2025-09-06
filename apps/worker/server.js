@@ -47,10 +47,16 @@ async function startServer() {
     
     // Start Kafka consumer
     await startConsumer({
-      onProcessed: () => processedMessagesCounter.inc(),
-      onRiskScoreCalculated: (score) => riskScoreHistogram.observe(score)
+      onProcessed: () => {
+        processedMessagesCounter.inc();
+        console.log('📊 Processed message counter incremented');
+      },
+      onRiskScoreCalculated: (score) => {
+        riskScoreHistogram.observe(score);
+        console.log(`📈 Risk score calculated: ${score}`);
+      }
     });
-    console.log('Kafka consumer started');
+    console.log('✅ Kafka consumer started and waiting for messages...');
     
     // Start Express server
     app.listen(PORT, () => {

@@ -178,7 +178,7 @@ router.get('/stats/summary', async (req, res) => {
     const result = await pool.query(query, queryParams);
     
     // Get risk distribution
-    const distributionQuery = `
+    let distributionQuery = `
       SELECT 
         CASE 
           WHEN risk_score BETWEEN 0 AND 0.2 THEN 'very_low'
