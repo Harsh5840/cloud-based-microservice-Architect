@@ -40,9 +40,22 @@ class AlphaVantageClient {
         timeout: 10000
       });
 
+      // Check for API limit or error messages
+      if (response.data['Information']) {
+        throw new Error(`API Limit: ${response.data['Information']}`);
+      }
+      
+      if (response.data['Error Message']) {
+        throw new Error(`API Error: ${response.data['Error Message']}`);
+      }
+      
+      if (response.data['Note']) {
+        throw new Error(`API Note: ${response.data['Note']}`);
+      }
+
       const quote = response.data['Global Quote'];
       if (!quote || Object.keys(quote).length === 0) {
-        throw new Error(`No data returned for symbol ${symbol}`);
+        throw new Error(`No data returned for symbol ${symbol}. Response keys: ${Object.keys(response.data).join(', ')}`);
       }
 
       return this.transformQuoteData(symbol, quote);

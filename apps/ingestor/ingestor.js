@@ -33,7 +33,14 @@ async function fetchFinancialData() {
     return data;
   } catch (error) {
     console.error('Error fetching financial data:', error.message);
-    console.log('Falling back to demo data...');
+    
+    if (error.message.includes('API Limit')) {
+      console.log('⚠️ Alpha Vantage API rate limit exceeded. Using demo data instead.');
+      console.log('💡 Consider upgrading to a premium Alpha Vantage plan for unlimited requests.');
+    } else {
+      console.log('🔄 Falling back to demo data due to API error...');
+    }
+    
     return generateDemoData();
   }
 }
@@ -42,12 +49,27 @@ async function fetchFinancialData() {
  * Generate demo financial data for testing
  */
 function generateDemoData() {
-  const demoSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA'];
+  const demoSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'JPM', 'JNJ'];
+  
+  // Realistic price ranges for each stock (approximate)
+  const priceRanges = {
+    'AAPL': [170, 200],
+    'MSFT': [350, 420],
+    'GOOGL': [130, 170],
+    'AMZN': [140, 180],
+    'TSLA': [200, 300],
+    'NVDA': [800, 1200],
+    'META': [450, 550],
+    'NFLX': [400, 600],
+    'JPM': [140, 180],
+    'JNJ': [150, 170]
+  };
   
   return demoSymbols.map(symbol => {
-    const basePrice = Math.random() * 200 + 50; // Random price between 50-250
-    const changePercent = (Math.random() - 0.5) * 10; // -5% to +5% change
-    const volume = Math.floor(Math.random() * 10000000) + 1000000; // 1M to 11M volume
+    const [minPrice, maxPrice] = priceRanges[symbol] || [100, 200];
+    const basePrice = Math.random() * (maxPrice - minPrice) + minPrice;
+    const changePercent = (Math.random() - 0.5) * 8; // -4% to +4% change
+    const volume = Math.floor(Math.random() * 50000000) + 5000000; // 5M to 55M volume
     
     return {
       id: `${symbol}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,

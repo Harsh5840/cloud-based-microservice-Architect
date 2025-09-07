@@ -26,9 +26,16 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd apps/worker; n
 # Wait a bit for worker to initialize
 Start-Sleep -Seconds 5
 
-# Start Dashboard (in background)
-Write-Host "🌐 Starting Dashboard service..." -ForegroundColor Cyan
+# Start Dashboard API (in background)
+Write-Host "🌐 Starting Dashboard API service..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd apps/dashboard; npm start" -WindowStyle Normal
+
+# Wait a bit for API to initialize
+Start-Sleep -Seconds 3
+
+# Start Next.js Dashboard (in background)
+Write-Host "🎨 Starting Next.js Dashboard..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd apps/dashboard-nextjs; npm run dev" -WindowStyle Normal
 
 # Wait a bit for dashboard to initialize
 Start-Sleep -Seconds 3
@@ -37,6 +44,7 @@ Start-Sleep -Seconds 3
 Write-Host "📈 Starting Ingestor service..." -ForegroundColor Cyan
 Write-Host "💡 This will run in foreground to show data processing..." -ForegroundColor Yellow
 Write-Host "🔗 Services will be available at:" -ForegroundColor Green
+Write-Host "   - Next.js Dashboard: http://localhost:3002" -ForegroundColor White
 Write-Host "   - Dashboard API: http://localhost:3000/api/trades" -ForegroundColor White
 Write-Host "   - Worker Metrics: http://localhost:3001/metrics" -ForegroundColor White
 Write-Host "   - Kafka UI: http://localhost:8080" -ForegroundColor White
