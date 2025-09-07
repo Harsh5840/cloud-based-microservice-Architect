@@ -1,149 +1,235 @@
 require('dotenv').config();
 const { produceMessage } = require('./kafkaProducer');
-const AlphaVantageClient = require('./alphaVantageClient');
+const ThreatIntelClient = require('./threatIntelClient');
 const cron = require('node-cron');
 
 // Configuration
-const KAFKA_TOPIC = process.env.KAFKA_TOPIC || 'financial-data';
-const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
-const POLLING_INTERVAL = process.env.POLLING_INTERVAL || 300000; // 5 minutes default for real data
+const KAFKA_TOPIC = process.env.KAFKA_TOPIC || 'threat-intelligence';
+const POLLING_INTERVAL = process.env.POLLING_INTERVAL || 300000; // 5 minutes default
 const USE_DEMO_MODE = process.env.USE_DEMO_MODE === 'true';
 
-// Stock symbols to track
-const SYMBOLS = (process.env.SYMBOLS || 'AAPL,MSFT,GOOGL,AMZN,TSLA').split(',');
+// Threat Intelligence API Configuration
+const threatIntelConfig = {
+  virusTotalApiKey: process.env.VIRUSTOTAL_API_KEY,
+  mispUrl: process.env.MISP_URL,
+  mispApiKey: process.env.MISP_API_KEY,
+  taxiiUrl: process.env.TAXII_URL,
+  taxiiUsername: process.env.TAXII_USERNAME,
+  taxiiPassword: process.env.TAXII_PASSWORD,
+  jsonFeeds: []
+};
 
-// Initialize Alpha Vantage client
-let alphaVantageClient = null;
-if (ALPHA_VANTAGE_API_KEY && !USE_DEMO_MODE) {
-  alphaVantageClient = new AlphaVantageClient(ALPHA_VANTAGE_API_KEY);
+// Parse JSON feed configuration
+if (process.env.JSON_FEED_URLS && process.env.JSON_FEED_NAMES) {
+  const urls = process.env.JSON_FEED_URLS.split(',');
+  const names = process.env.JSON_FEED_NAMES.split(',');
+  
+  for (let i = 0; i < Math.min(urls.length, names.length); i++) {
+    threatIntelConfig.jsonFeeds.push({
+      name: names[i].trim(),
+      url: urls[i].trim()
+    });
+  }
+}
+
+// Initialize Threat Intelligence client
+let threatIntelClient = null;
+if (!USE_DEMO_MODE && (threatIntelConfig.virusTotalApiKey || threatIntelConfig.mispUrl || threatIntelConfig.taxiiUrl)) {
+  threatIntelClient = new ThreatIntelClient(threatIntelConfig);
 }
 
 /**
- * Fetch financial data from Alpha Vantage or generate demo data
+ * Fetch threat intelligence data from configured sources or generate demo data
  */
-async function fetchFinancialData() {
+async function fetchThreatIntelligence() {
   try {
-    if (USE_DEMO_MODE || !alphaVantageClient) {
-      console.log('Generating demo financial data...');
-      return generateDemoData();
+    if (USE_DEMO_MODE || !threatIntelClient) {
+      console.log('Generating demo threat intelligence data...');
+      return generateDemoThreatData();
     }
     
-    console.log(`Fetching real financial data for symbols: ${SYMBOLS.join(', ')}`);
-    const data = await alphaVantageClient.getMultipleQuotes(SYMBOLS);
+    console.log('Fetching real threat intelligence from configured sources...');
+    const data = await threatIntelClient.getAllThreatIntel();
     return data;
   } catch (error) {
-    console.error('Error fetching financial data:', error.message);
+    console.error('Error fetching threat intelligence:', error.message);
     
-    if (error.message.includes('API Limit')) {
-      console.log('⚠️ Alpha Vantage API rate limit exceeded. Using demo data instead.');
-      console.log('💡 Consider upgrading to a premium Alpha Vantage plan for unlimited requests.');
+    if (error.message.includes('API Limit') || error.message.includes('rate limit')) {
+      console.log('⚠️ Threat intelligence API rate limit exceeded. Using demo data instead.');
+      console.log('💡 Consider upgrading API plans for higher rate limits.');
     } else {
       console.log('🔄 Falling back to demo data due to API error...');
     }
     
-    return generateDemoData();
+    return generateDemoThreatData();
   }
 }
 
 /**
- * Generate demo financial data for testing
+ * Generate demo threat intelligence data for testing
  */
-function generateDemoData() {
-  const demoSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'JPM', 'JNJ'];
+function generateDemoThreatData() {
+  const demoIndicators = [];
   
-  // Realistic price ranges for each stock (approximate)
-  const priceRanges = {
-    'AAPL': [170, 200],
-    'MSFT': [350, 420],
-    'GOOGL': [130, 170],
-    'AMZN': [140, 180],
-    'TSLA': [200, 300],
-    'NVDA': [800, 1200],
-    'META': [450, 550],
-    'NFLX': [400, 600],
-    'JPM': [140, 180],
-    'JNJ': [150, 170]
-  };
-  
-  return demoSymbols.map(symbol => {
-    const [minPrice, maxPrice] = priceRanges[symbol] || [100, 200];
-    const basePrice = Math.random() * (maxPrice - minPrice) + minPrice;
-    const changePercent = (Math.random() - 0.5) * 8; // -4% to +4% change
-    const volume = Math.floor(Math.random() * 50000000) + 5000000; // 5M to 55M volume
-    
-    return {
-      id: `${symbol}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      symbol: symbol,
-      timestamp: new Date().toISOString(),
-      price: basePrice,
-      open: basePrice * (1 + (Math.random() - 0.5) * 0.02),
-      high: basePrice * (1 + Math.random() * 0.03),
-      low: basePrice * (1 - Math.random() * 0.03),
-      close: basePrice,
-      volume: volume,
-      price_change_percent: changePercent,
-      volatility: Math.random() * 50 + 10, // 10-60 volatility
-      market_sentiment: determineSentiment(changePercent)
-    };
-  });
-}
-
-/**
- * Determine market sentiment based on price change
- */
-function determineSentiment(changePercent) {
-  if (changePercent > 3) return 'very_bullish';
-  if (changePercent > 1) return 'bullish';
-  if (changePercent > -1) return 'neutral';
-  if (changePercent > -3) return 'bearish';
-  return 'very_bearish';
-}
-
-/**
- * Process and send data to Kafka
- */
-async function processAndSendData() {
-  const data = await fetchFinancialData();
-  
-  if (!data) {
-    console.log('No data to process. Skipping...');
-    return;
-  }
-  
-  // If data is an array, send each item individually
-  if (Array.isArray(data)) {
-    console.log(`Processing ${data.length} financial records`);
-    for (const item of data) {
-      await produceMessage(KAFKA_TOPIC, {
-        timestamp: new Date().toISOString(),
-        data: item,
-        source: 'financial-api'
-      });
-    }
-  } else {
-    // Send single data point
-    await produceMessage(KAFKA_TOPIC, {
-      timestamp: new Date().toISOString(),
-      data: data,
-      source: 'financial-api'
+  // Generate malicious IPs
+  for (let i = 0; i < 5; i++) {
+    demoIndicators.push({
+      id: `demo_ip_${Date.now()}_${i}`,
+      indicator_type: 'ip',
+      indicator_value: `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+      confidence_score: Math.floor(Math.random() * 40) + 60, // 60-100
+      severity_level: ['high', 'medium', 'low'][Math.floor(Math.random() * 3)],
+      first_seen: new Date(Date.now() - Math.random() * 86400000 * 7).toISOString(), // Last 7 days
+      last_seen: new Date().toISOString(),
+      tags: ['botnet', 'malware', 'c2'].slice(0, Math.floor(Math.random() * 3) + 1),
+      source_feeds: ['demo-feed'],
+      tlp_marking: 'white',
+      metadata: {
+        country: ['US', 'CN', 'RU', 'KP'][Math.floor(Math.random() * 4)],
+        asn: `AS${Math.floor(Math.random() * 65535)}`
+      },
+      timestamp: new Date().toISOString()
     });
   }
   
-  console.log('Data successfully sent to Kafka');
+  // Generate malicious domains
+  const domains = ['evil-site.com', 'malware-host.net', 'phishing-bank.org', 'fake-update.info', 'trojan-download.biz'];
+  for (let i = 0; i < domains.length; i++) {
+    demoIndicators.push({
+      id: `demo_domain_${Date.now()}_${i}`,
+      indicator_type: 'domain',
+      indicator_value: domains[i],
+      confidence_score: Math.floor(Math.random() * 30) + 70, // 70-100
+      severity_level: ['high', 'medium'][Math.floor(Math.random() * 2)],
+      first_seen: new Date(Date.now() - Math.random() * 86400000 * 30).toISOString(), // Last 30 days
+      last_seen: new Date().toISOString(),
+      tags: ['phishing', 'malware', 'c2', 'apt'].slice(0, Math.floor(Math.random() * 3) + 1),
+      source_feeds: ['demo-feed'],
+      tlp_marking: 'white',
+      metadata: {
+        registrar: 'Demo Registrar',
+        creation_date: new Date(Date.now() - Math.random() * 86400000 * 365).toISOString()
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Generate malicious hashes
+  for (let i = 0; i < 3; i++) {
+    demoIndicators.push({
+      id: `demo_hash_${Date.now()}_${i}`,
+      indicator_type: 'hash',
+      indicator_value: Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+      confidence_score: Math.floor(Math.random() * 20) + 80, // 80-100
+      severity_level: 'high',
+      first_seen: new Date(Date.now() - Math.random() * 86400000 * 3).toISOString(), // Last 3 days
+      last_seen: new Date().toISOString(),
+      tags: ['malware', 'trojan', 'ransomware'][i] ? [['malware', 'trojan', 'ransomware'][i]] : ['malware'],
+      source_feeds: ['demo-feed'],
+      tlp_marking: 'white',
+      metadata: {
+        file_type: ['exe', 'dll', 'pdf'][Math.floor(Math.random() * 3)],
+        size: Math.floor(Math.random() * 10000000) + 1000
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  return demoIndicators;
+}
+
+/**
+ * Determine threat risk level based on confidence and severity
+ */
+function determineThreatRisk(confidence, severity) {
+  const severityWeight = {
+    'critical': 4,
+    'high': 3,
+    'medium': 2,
+    'low': 1
+  };
+  
+  const baseRisk = (confidence / 100) * (severityWeight[severity] || 2);
+  
+  if (baseRisk >= 3.5) return 'critical';
+  if (baseRisk >= 2.5) return 'high';
+  if (baseRisk >= 1.5) return 'medium';
+  return 'low';
+}
+
+/**
+ * Process and send threat intelligence data to Kafka
+ */
+async function processAndSendData() {
+  const data = await fetchThreatIntelligence();
+  
+  if (!data || data.length === 0) {
+    console.log('No threat intelligence data to process. Skipping...');
+    return;
+  }
+  
+  console.log(`Processing ${data.length} threat intelligence indicators`);
+  
+  // Process each threat indicator
+  for (const indicator of data) {
+    if (!indicator) continue;
+    
+    // Calculate risk level
+    const riskLevel = determineThreatRisk(indicator.confidence_score, indicator.severity_level);
+    
+    // Enrich indicator with additional metadata
+    const enrichedIndicator = {
+      ...indicator,
+      risk_level: riskLevel,
+      ingestion_timestamp: new Date().toISOString(),
+      processing_metadata: {
+        ingestor_version: '2.0.0',
+        processing_time: new Date().toISOString()
+      }
+    };
+    
+    // Send to Kafka
+    await produceMessage(KAFKA_TOPIC, {
+      timestamp: new Date().toISOString(),
+      event_type: 'threat_indicator',
+      data: enrichedIndicator,
+      source: 'threat-intelligence-ingestor'
+    });
+  }
+  
+  console.log('Threat intelligence data successfully sent to Kafka');
+  
+  // Log summary statistics
+  const severityCounts = data.reduce((acc, indicator) => {
+    acc[indicator.severity_level] = (acc[indicator.severity_level] || 0) + 1;
+    return acc;
+  }, {});
+  
+  console.log('Threat intelligence summary:', {
+    total_indicators: data.length,
+    severity_breakdown: severityCounts,
+    sources: [...new Set(data.flatMap(i => i.source_feeds))]
+  });
 }
 
 /**
  * Main execution loop
  */
 async function startIngestor() {
-  console.log('Financial Risk Analyzer - Ingestor Service Starting...');
+  console.log('Cybersecurity Threat Intelligence - Ingestor Service Starting...');
   
-  if (USE_DEMO_MODE || !ALPHA_VANTAGE_API_KEY) {
-    console.log('🔧 Running in DEMO MODE - generating synthetic data');
+  if (USE_DEMO_MODE || !threatIntelClient) {
+    console.log('🔧 Running in DEMO MODE - generating synthetic threat intelligence');
     console.log(`Polling interval: ${POLLING_INTERVAL}ms`);
   } else {
-    console.log('📈 Running with REAL Alpha Vantage data');
-    console.log(`Tracking symbols: ${SYMBOLS.join(', ')}`);
+    console.log('🛡️ Running with REAL threat intelligence sources');
+    const configuredSources = [];
+    if (threatIntelConfig.virusTotalApiKey) configuredSources.push('VirusTotal');
+    if (threatIntelConfig.mispUrl) configuredSources.push('MISP');
+    if (threatIntelConfig.taxiiUrl) configuredSources.push('STIX/TAXII');
+    if (threatIntelConfig.jsonFeeds.length > 0) configuredSources.push(`${threatIntelConfig.jsonFeeds.length} JSON feeds`);
+    
+    console.log(`Configured sources: ${configuredSources.join(', ')}`);
     console.log(`Polling interval: ${POLLING_INTERVAL}ms`);
   }
   
@@ -153,29 +239,34 @@ async function startIngestor() {
   // Set up polling interval
   setInterval(processAndSendData, POLLING_INTERVAL);
   
-  // Also set up a cron job for market hours (9:30 AM - 4:00 PM EST, Mon-Fri)
-  // This runs every 5 minutes during market hours
-  cron.schedule('*/5 9-16 * * 1-5', async () => {
-    console.log('📊 Market hours data collection triggered');
+  // Set up continuous threat intelligence collection (every 15 minutes)
+  cron.schedule('*/15 * * * *', async () => {
+    console.log('🔍 Scheduled threat intelligence collection triggered');
+    await processAndSendData();
+  });
+  
+  // Set up high-frequency collection during business hours (every 5 minutes, 8 AM - 6 PM UTC)
+  cron.schedule('*/5 8-18 * * 1-5', async () => {
+    console.log('⚡ High-frequency threat intelligence collection triggered');
     await processAndSendData();
   }, {
-    timezone: "America/New_York"
+    timezone: "UTC"
   });
 }
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('🛑 Shutting down ingestor service...');
+  console.log('🛑 Shutting down threat intelligence ingestor service...');
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  console.log('🛑 Shutting down ingestor service...');
+  console.log('🛑 Shutting down threat intelligence ingestor service...');
   process.exit(0);
 });
 
 // Start the ingestor
 startIngestor().catch(err => {
-  console.error('Fatal error in ingestor service:', err);
+  console.error('Fatal error in threat intelligence ingestor service:', err);
   process.exit(1);
 });

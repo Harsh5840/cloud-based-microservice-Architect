@@ -1,11 +1,11 @@
 {
-  "name": "financial-risk-analyzer-ingestor",
-  "version": "1.0.0",
-  "description": "Service that pulls financial data and sends to Kafka",
+  "name": "cybersecurity-threat-intelligence-ingestor",
+  "version": "2.0.0",
+  "description": "Service that collects threat intelligence from multiple sources and sends to Kafka",
   "main": "ingestor.js",
   "scripts": {
     "start": "node ingestor.js",
-    "test": "node test-alphavantage.js",
+    "test": "node test-threat-intel.js",
     "test:demo": "USE_DEMO_MODE=true node ingestor.js"
   },
   "dependencies": {
